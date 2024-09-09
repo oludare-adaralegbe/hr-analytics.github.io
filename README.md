@@ -347,6 +347,11 @@ WHERE
 	);
 ```
 
+**Result**
+
+![Health Bonus](assets/images/health_bonus.png)
+
+
 ### Annual Compensation Increase for Non-Smokers
 ```sql
 /* Annual Compensation Increase for Non-Smokers (Budget = $983,221)
@@ -375,3 +380,7 @@ SELECT
 FROM
 	nonSmokers;
 ```
+
+**Result**
+
+![Annual Compensation](assets/images/annual_compensation.png)
