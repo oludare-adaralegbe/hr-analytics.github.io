@@ -21,6 +21,7 @@
 - [Visualisation](#visualisation)
   - [Dashboard](#dashboard)
   - [DAX Measures](#dax-measures)
+- [Analysis](#analysis)
 
 
 ## Objective
@@ -251,3 +252,126 @@ WHERE row_num > 1;
 ### Dashboard
 
 ![Power BI Dashboard GIF](assets/images/powerbi_dashhboard.gif)
+
+
+### DAX Measures
+#### 1. Estimated Annual Absenteeism (%)
+<pre>
+<code>
+EstPercOfDaysAbsent = 
+VAR DailyHours = 8
+VAR DaysAbsent = DIVIDE([TotalAbsenteeism], DailyHours)
+VAR AverageWorkdaysPerMonth = 22 // This is an estimate, as it doesn't allow for possible differences in the number of workdays per month.
+VAR MonthsInAYear = 12
+VAR AvgHolidayPerYear = 34 // for employees in the UK, inclusive of bank holidays
+VAR TotalWorkDays = (AverageWorkdaysPerMonth * MonthsInAYear) - AvgHolidayPerYear
+RETURN
+    DIVIDE(DaysAbsent, TotalWorkDays) * 100
+</code>
+</pre>
+
+
+#### 2. Week Name
+```sql
+WeekName = 
+SWITCH(
+    'view_work'[Day_of_the_week],
+    2, "Mon",
+    3, "Tue",
+    4, "Wed",
+    5, "Thu",
+    6, "Fri",
+    "0"
+)
+```
+
+#### 3. Month Name
+```sql
+MonthName = 
+SWITCH(
+    'view_work'[Month_of_absence],
+    1, "Jan",
+    2, "Feb",
+    3, "Mar",
+    4, "Apr",
+    5, "May",
+    6, "Jun",
+    7, "Jul",
+    8, "Aug",
+    9, "Sep",
+    10, "Oct",
+    11, "Nov",
+    12, "Dec",
+    "0"
+)
+```
+
+#### 4. Correlation
+(Age, BMI, Distance from residence to work, Tenure, Number of Children, Transport expense, Average daily work load) vs Absenteeism
+```sql
+Correlation_Age_Absenteeism = 
+VAR MeanX = AVERAGE('view_work'[Age])
+VAR MeanY = AVERAGE('view_work'[Absenteeism_time_in_hours])
+VAR Numerator = SUMX('view_work', ('view_work'[Age] - MeanX) * ('view_work'[Absenteeism_time_in_hours] - MeanY))
+VAR Denominator = SQRT(SUMX('view_work', ('view_work'[Age] - MeanX)^2) * SUMX('view_work', ('view_work'[Absenteeism_time_in_hours] - MeanY)^2))
+RETURN DIVIDE(Numerator, Denominator)
+```
+
+
+## Analysis
+### Eligible Employees for Health Bonus
+```sql
+/* Eligible Employees for Health Bonus
+
+NOTE: HR did not give criteria for what they consider as 'good health'
+Direct health indicators include:
+	- Body mass index (BMI): A common measure of weight in relation to height that is usually used as an indicator for general health.
+	- Social smoker: Smoking is linked to various health issues.
+	- Social drinker: Excessive alcohol consumption can impact health.
+
+Indirect health indicators (lifestyle and behaviours) include:
+	- Absenteeism time in hours: Lower absenteeism rates generally correlate with better health.
+	- Reason for absence: Frequent absences due to illness might indicate poorer health.
+*/
+
+SELECT *
+FROM
+	work_db..view_work
+WHERE
+	Body_mass_index BETWEEN 18.5 AND 24.9
+	AND Social_smoker = 0
+	AND Social_drinker = 0
+	AND Absenteeism_time_in_hours < (
+		SELECT AVG(Absenteeism_time_in_hours)
+		FROM work_db..view_work
+	);
+```
+
+### Annual Compensation Increase for Non-Smokers
+```sql
+/* Annual Compensation Increase for Non-Smokers (Budget = $983,221)
+1. Define any variables needed for calculations
+2. Create a Common Table Expression (CTE) to calculate the number of non smokers
+3. Create calculated columns
+*/
+
+DECLARE @insuranceBudget MONEY = 983221.0;	-- insurance budget allocated for all non-smokers
+DECLARE @hoursPerYear INT = 2080;			-- 8 hours x 5 days x 52 weeks
+
+WITH nonSmokers AS (
+	SELECT 
+		COUNT(*) AS non_smokers
+	FROM
+		work_db..view_work
+	WHERE
+		Social_smoker = 0
+)
+
+SELECT
+	non_smokers,
+	non_smokers * @hoursPerYear AS hours_by_non_smokers_per_year,
+	@insuranceBudget / (non_smokers * @hoursPerYear) AS increment_per_hour,
+	(@insuranceBudget / (non_smokers * @hoursPerYear)) * @hoursPerYear AS annual_compensation_increase
+FROM
+	nonSmokers;
+```
